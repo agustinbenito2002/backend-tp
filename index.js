@@ -1,3 +1,7 @@
+import { createClient } from '@supabase/supabase-js' 
+
+const supabase = createClient(process.env.SUPABASE_URL, process.env.DATABASE_KEY)
+
 const express = require('express')
 const app = express()
 app.use(express.json())
