@@ -1,98 +1,83 @@
 import { createClient } from '@supabase/supabase-js' 
+import express from 'express'
+import {supabase} from "./db.js"
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.DATABASE_KEY)
 
-const express = require('express')
 const app = express()
 app.use(express.json())
 
 
+// Get all duenios
+app.get('/api/duenios', async (request, response) => {
+  const { data: duenios, error } = await supabase
+    .from('duenios')
+    .select('*')
 
-let notes = [
-  {
-    id: 1,
-    content: "HTML is easy",
-    important: true
-  },
-  {
-    id: 2,
-    content: "Browser can execute only JavaScript",
-    important: false
-  },
-  {
-    id: 3,
-    content: "GET and POST are the most important methods of HTTP protocol",
-    important: true
+  if (error) {
+    return response.status(500).json({ error: error.message })
   }
-]
+  response.json(duenios)
+})
 
-app.get('/api/notes/:id', (request, response) => {
-  const id = Number(request.params.id)
-  const note = notes.find(note => note.id === id)
-  
+// Get single duenio by id
+app.get('/api/duenio/:id_duenio', async (request, response) => {
+  const id = Number(request.params.id_duenio)
+  const { data: duenio, error } = await supabase
+    .from('duenio')
+    .select('*')
+    .eq('id_duenio', id)
+    .single()
 
-  if (note) {
-    response.json(note)
+
+  if (error) {
+     console.log(error);
+    response.status(404).json({ error: 'Duenio not found' })
+       
   } else {
-    response.status(404).end()
+    response.json(duenio)
   }
 })
-app.get('/', (request, response) => {
-  response.send('<h1>Hello World!</h1>')
+
+// Get all objetos perdidos
+app.get('/api/objetos', async (request, response) => {
+  const { data: objetos, error } = await supabase
+    .from('objetos_perdidos')
+    .select('*')
+
+  if (error) {
+    return response.status(500).json({ error: error.message })
+  }
+  response.json(objetos)
 })
 
-app.get('/api/notes', (request, response) => {
-  response.json(notes)
-})
-
-app.delete('/api/notes/:id', (request, response) => {
+// Get single objeto perdido by id
+app.get('/api/objetos/:id', async (request, response) => {
   const id = Number(request.params.id)
-  notes = notes.filter(note => note.id !== id)
+  const { data: objeto, error } = await supabase
+    .from('objetos_perdidos')
+    .select('*')
+    .eq('id', id)
+    .single()
 
-  response.status(204).end()
-})
-
-app.post('/api/notes', (request, response) => {
-  const maxId = notes.length > 0
-    ? Math.max(...notes.map(n => n.id)) 
-    : 0
-
-  const note = request.body
-  note.id = maxId + 1
-
-  notes = notes.concat(note)
-
-  response.json(note)
-})
-
-const generateId = () => {
-  const maxId = notes.length > 0
-    ? Math.max(...notes.map(n => n.id))
-    : 0
-  return maxId + 1
-}
-
-app.post('/api/notes', (request, response) => {
-  const body = request.body
-
-  if (!body.content) {
-    return response.status(400).json({ 
-      error: 'content missing' 
-    })
+  if (error) {
+    return response.status(404).json({ error: 'Objeto not found' })
   }
-
-  const note = {
-    content: body.content,
-    important: Boolean(body.important) || false,
-    id: generateId(),
-  }
-
-  notes = notes.concat(note)
-
-  response.json(note)
+  response.json(objeto)
 })
 
+// Get objetos perdidos by duenio_id
+app.get('/api/duenios/:id/objetos', async (request, response) => {
+  const duenio_id = Number(request.params.id)
+  const { data: objetos, error } = await supabase
+    .from('objetos_perdidos')
+    .select('*')
+    .eq('duenio_id', duenio_id)
 
+  if (error) {
+    return response.status(500).json({ error: error.message })
+  }
+  response.json(objetos)
+})
 
 const PORT = 3001
 app.listen(PORT, () => {
