@@ -9,21 +9,23 @@ app.use(express.json())
 
 // Get all duenios
 app.get('/api/duenios', async (request, response) => {
-  const { data: duenios, error } = await supabase
+  const { data, error } = await supabase
     .from('duenios')
-    .select('*')
-
+    .select()
   if (error) {
     return response.status(500).json({ error: error.message })
   }
-  response.json(duenios)
+
+  console.log(data);
+
+  response.json(data)
 })
 
 // Get single duenio by id
-app.get('/api/duenio/:id_duenio', async (request, response) => {
+app.get('/api/duenios/:id_duenio', async (request, response) => {
   const id = Number(request.params.id_duenio)
   const { data: duenio, error } = await supabase
-    .from('duenio')
+    .from('duenios')
     .select('*')
     .eq('id_duenio', id)
     .single()
@@ -55,7 +57,7 @@ app.get('/api/objetos/:id', async (request, response) => {
   const id = Number(request.params.id)
   const { data: objeto, error } = await supabase
     .from('objetos_perdidos')
-    .select('*')
+    .select('*, duenios(duenio)')
     .eq('id', id)
     .single()
 
