@@ -1,12 +1,12 @@
-
-import env from "dotenv";
-
+import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 
-env.config();
+dotenv.config();
 
-const supabase = createClient(process.env.SUPABASE_URL,process.env.DATABASE_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.DATABASE_KEY
+);
 
-// Services 
-
+// Exportar el cliente
 export { supabase };
