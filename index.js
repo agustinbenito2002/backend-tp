@@ -1,14 +1,31 @@
 import express from 'express'
+import cors from 'cors'
 import { supabase } from './db.js'
 
 const app = express()
+
+app.use(cors()) // Habilitar CORS para todas las rutas
+
+app.use(cors({
+  origin: 'http://localhost:5173',      // tu frontend Vite
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "http://localhost:5173");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  next();
+});
+
 app.use(express.json())
 
 // =============================
-//      CRUD - DUENIOS
+// CRUD - DUENIOS
 // =============================
 
-// Create duenio
+// Crear dueño
 app.post('/api/duenios', async (req, res) => {
   const { duenio, telefono, mail, direccion } = req.body
 
@@ -22,7 +39,7 @@ app.post('/api/duenios', async (req, res) => {
   res.json(data)
 })
 
-// Read all duenios
+// Obtener todos los dueños
 app.get('/api/duenios', async (req, res) => {
   const { data, error } = await supabase
     .from('duenios')
@@ -32,7 +49,7 @@ app.get('/api/duenios', async (req, res) => {
   res.json(data)
 })
 
-// Read one duenio by id
+// Obtener dueño por id
 app.get('/api/duenios/:id_duenio', async (req, res) => {
   const id = Number(req.params.id_duenio)
 
@@ -42,11 +59,11 @@ app.get('/api/duenios/:id_duenio', async (req, res) => {
     .eq('id_duenio', id)
     .single()
 
-  if (error) return res.status(404).json({ error: 'Duenio not found' })
+  if (error) return res.status(404).json({ error: 'Duenio no encontrado' })
   res.json(data)
 })
 
-// Update duenio
+// Actualizar dueño
 app.put('/api/duenios/:id_duenio', async (req, res) => {
   const id = Number(req.params.id_duenio)
   const { duenio, telefono, mail, direccion } = req.body
@@ -62,7 +79,7 @@ app.put('/api/duenios/:id_duenio', async (req, res) => {
   res.json(data)
 })
 
-// Delete duenio
+// Eliminar dueño
 app.delete('/api/duenios/:id_duenio', async (req, res) => {
   const id = Number(req.params.id_duenio)
 
@@ -77,19 +94,19 @@ app.delete('/api/duenios/:id_duenio', async (req, res) => {
 
 
 // =============================
-//   CRUD - OBJETOS PERDIDOS
+// CRUD - OBJETOS PERDIDOS
 // =============================
 
-// Create objeto perdido
+// Crear objeto
 app.post('/api/objetos', async (req, res) => {
   const { nombre_object, caracteristicas, id_duenio } = req.body
 
   const { data, error } = await supabase
     .from('objetos_perdidos')
     .insert([{ 
-      "nombre object": nombre_object, 
-      caracteristicas, 
-      "id duenio": id_duenio 
+      nombre_object,
+      caracteristicas,
+      id_duenio 
     }])
     .select()
     .single()
@@ -98,7 +115,7 @@ app.post('/api/objetos', async (req, res) => {
   res.json(data)
 })
 
-// Read all objetos perdidos
+// Obtener todos los objetos
 app.get('/api/objetos', async (req, res) => {
   const { data, error } = await supabase
     .from('objetos_perdidos')
@@ -108,7 +125,7 @@ app.get('/api/objetos', async (req, res) => {
   res.json(data)
 })
 
-// Read objeto perdido by id (with duenio info)
+// Obtener un objeto con info del dueño
 app.get('/api/objetos/:id', async (req, res) => {
   const id = Number(req.params.id)
 
@@ -118,11 +135,11 @@ app.get('/api/objetos/:id', async (req, res) => {
     .eq('id', id)
     .single()
 
-  if (error) return res.status(404).json({ error: 'Objeto not found' })
+  if (error) return res.status(404).json({ error: 'Objeto no encontrado' })
   res.json(data)
 })
 
-// Update objeto perdido
+// Actualizar objeto
 app.put('/api/objetos/:id', async (req, res) => {
   const id = Number(req.params.id)
   const { nombre_object, caracteristicas, id_duenio } = req.body
@@ -130,9 +147,9 @@ app.put('/api/objetos/:id', async (req, res) => {
   const { data, error } = await supabase
     .from('objetos_perdidos')
     .update({
-      "nombre object": nombre_object,
+      nombre_object,
       caracteristicas,
-      "id duenio": id_duenio
+      id_duenio
     })
     .eq('id', id)
     .select()
@@ -142,7 +159,7 @@ app.put('/api/objetos/:id', async (req, res) => {
   res.json(data)
 })
 
-// Delete objeto perdido
+// Eliminar objeto
 app.delete('/api/objetos/:id', async (req, res) => {
   const id = Number(req.params.id)
 
@@ -157,7 +174,7 @@ app.delete('/api/objetos/:id', async (req, res) => {
 
 
 // =============================
-//  OBJETOS DE UN DUEÑO
+// OBJETOS POR DUEÑO
 // =============================
 app.get('/api/duenios/:id_duenio/objetos', async (req, res) => {
   const id = Number(req.params.id_duenio)
@@ -165,7 +182,7 @@ app.get('/api/duenios/:id_duenio/objetos', async (req, res) => {
   const { data, error } = await supabase
     .from('objetos_perdidos')
     .select('*')
-    .eq('id duenio', id)
+    .eq('id_duenio', id)
 
   if (error) return res.status(500).json({ error: error.message })
   res.json(data)
@@ -173,7 +190,7 @@ app.get('/api/duenios/:id_duenio/objetos', async (req, res) => {
 
 
 // =============================
-//       START SERVER
+// INICIAR SERVIDOR
 // =============================
 const PORT = 3001
 app.listen(PORT, () => {
