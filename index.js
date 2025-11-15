@@ -111,8 +111,8 @@ app.get("/api/duenios", async (req, res) => {
   res.json(data);
 });
 
-app.get("/api/duenios/:id_duenio", async (req, res) => {
-  const id = Number(req.params.id_duenio);
+app.get("/api/duenios/:id", async (req, res) => {
+  const { id } = req.params;
 
   const { data, error } = await supabase
     .from("duenios")
@@ -120,9 +120,13 @@ app.get("/api/duenios/:id_duenio", async (req, res) => {
     .eq("id_duenio", id)
     .single();
 
-  if (error) return res.status(404).json({ error: "Duenio no encontrado" });
+  if (error) return res.status(404).json({ error: "Dueño no encontrado" });
+
   res.json(data);
 });
+
+
+
 
 app.put("/api/duenios/:id_duenio", async (req, res) => {
   const id = Number(req.params.id_duenio);
@@ -156,26 +160,73 @@ app.delete("/api/duenios/:id_duenio", async (req, res) => {
 // ============================
 
 app.post("/api/objetos", async (req, res) => {
-  const { nombre_object, caracteristicas, id_duenio } = req.body;
+  const { nombre, caracteristicas, id_duenio, estado } = req.body;
 
-  const { data, error } = await supabase
-    .from("objetos_perdidos")
-    .insert([{ nombre_object, caracteristicas, id_duenio }])
-    .select()
+  if (!nombre || !caracteristicas || id_duenio === "" || estado === undefined) {
+    return res.status(400).json({ error: "Faltan datos obligatorios" });
+  }
+
+  // Validamos que el dueño exista
+  const { data: duenioExiste, error: duenioError } = await supabase
+    .from("duenios")
+    .select("id_duenio")
+    .eq("id_duenio", id_duenio)
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  if (duenioError || !duenioExiste) {
+    return res.status(400).json({ error: "El dueño no existe" });
+  }
+
+  // Insertamos
+  const { data, error } = await supabase
+    .from("objetos_perdidos")
+    .insert([
+      {
+        nombre,
+        caracteristicas,
+        id_duenio: Number(id_duenio),
+        estado: Boolean(estado),
+      },
+    ])
+    .select();
+
+  if (error) {
+    console.error("Error insertando objeto:", error);
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json(data[0]);
 });
+
 
 app.get("/api/objetos", async (req, res) => {
   const { data, error } = await supabase
     .from("objetos_perdidos")
-    .select("*");
+    .select(`
+      id,
+      nombre,
+      caracteristicas,
+      estado,
+      id_duenio,
+      created_at,
+      duenios:duenios (
+        id_duenio,
+        duenio,
+        telefono,
+        mail,
+        direccion
+      )
+    `)
+    .order("id", { ascending: true });
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    console.error("Error obteniendo objetos:", error);
+    return res.status(500).json({ error: error.message });
+  }
+
   res.json(data);
 });
+
 
 app.get("/api/objetos/:id", async (req, res) => {
   const id = Number(req.params.id);
@@ -192,8 +243,7 @@ app.get("/api/objetos/:id", async (req, res) => {
 
 app.put("/api/objetos/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const { nombre_object, caracteristicas, id_duenio } = req.body;
-
+  const { nombre, caracteristicas, id_duenio, estado } = req.body;
   const { data, error } = await supabase
     .from("objetos_perdidos")
     .update({ nombre_object, caracteristicas, id_duenio })
@@ -204,6 +254,29 @@ app.put("/api/objetos/:id", async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
+
+// POST → Crear objeto en Supabase
+app.post("/api/objetos", async (req, res) => {
+  const { nombre, caracteristicas, id_duenio, estado } = req.body;
+
+  // Insertar en la tabla EXACTA "objetos_perdidos"
+  const { data, error } = await supabase
+    .from("objetos_perdidos")
+    .insert([
+      {
+        nombre,
+        caracteristicas,
+        id_duenio,
+        estado,
+      },
+    ])
+    .select(); // <- importante: devuelve el objeto creado
+
+  if (error) return res.status(400).json({ error: error.message });
+
+  res.json({ message: "Objeto creado", objeto: data[0] });
+});
+
 
 app.delete("/api/objetos/:id", async (req, res) => {
   const id = Number(req.params.id);
