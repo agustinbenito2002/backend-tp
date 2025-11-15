@@ -105,9 +105,12 @@ app.post("/api/duenios", async (req, res) => {
 });
 
 app.get("/api/duenios", async (req, res) => {
-  const { data, error } = await supabase.from("duenios").select("*");
+  const { data, error } = await supabase
+    .from("duenios")
+    .select("id_duenio, duenio");
 
   if (error) return res.status(500).json({ error: error.message });
+
   res.json(data);
 });
 
@@ -279,7 +282,7 @@ app.post("/api/objetos", async (req, res) => {
 
 
 app.delete("/api/objetos/:id", async (req, res) => {
-  const id = Number(req.params.id);
+  const { id } = req.params;
 
   const { error } = await supabase
     .from("objetos_perdidos")
@@ -287,8 +290,10 @@ app.delete("/api/objetos/:id", async (req, res) => {
     .eq("id", id);
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ message: "Objeto eliminado correctamente" });
+
+  res.json({ message: "Objeto eliminado" });
 });
+
 
 // Objetos por dueño
 app.get("/api/duenios/:id_duenio/objetos", async (req, res) => {
