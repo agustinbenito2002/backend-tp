@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import cors from "cors";
 import jwt from "jsonwebtoken";
@@ -7,19 +10,34 @@ import { supabase } from "./db.js";
 const app = express();
 app.use(express.json());
 
-// CORS
+const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: CLIENT_URL,
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
+// Health check - devuelve 200 para comprobar que el backend está activo
+app.get("/", (req, res) => {
+  res.json({ message: "Backend running" });
+});
+
+// Controlador para favicon (evita 404 en algunas apps)
+app.get("/favicon.ico", (req, res) => res.status(204).end());
+
+// ============================
+// UTIL - Async error wrapper
+// ============================
+const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
 // ============================
 // JWT CONFIG
 // ============================
-const SECRET_KEY = "MI_SECRETO_SUPER_SEGURO";
+const SECRET_KEY = process.env.SECRET_KEY ?? "MI_SECRETO_SUPER_SEGURO";
 
 // Middleware para proteger rutas
 function verificarToken(req, res, next) {
@@ -41,46 +59,61 @@ function verificarToken(req, res, next) {
 // ============================
 
 // Registrar usuario
-app.post("/api/auth/register", async (req, res) => {
-  const { email, password, nombre } = req.body;
+app.post(
+  "/api/auth/register",
+  asyncHandler(async (req, res) => {
+    const { email, password, nombre } = req.body;
 
-  const hashed = await bcrypt.hash(password, 10);
+    if (!email || !password || !nombre) {
+      return res.status(400).json({ error: "Faltan datos obligatorios" });
+    }
 
-  const { data, error } = await supabase
-    .from("usuarios")
-    .insert([{ email, password: hashed, nombre }])
-    .select()
-    .single();
+    const hashed = await bcrypt.hash(password, 10);
 
-  if (error) return res.status(500).json({ error: error.message });
+    const { data, error } = await supabase
+      .from("usuarios")
+      .insert([{ email, password: hashed, nombre }])
+      .select()
+      .single();
 
-  res.json({ message: "Usuario registrado", user: data });
-});
+    if (error) {
+      console.error("Error creando usuario:", error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json({ message: "Usuario registrado", user: data });
+  })
+);
 
 // Login
-app.post("/api/auth/login", async (req, res) => {
-  const { email, password } = req.body;
+app.post(
+  "/api/auth/login",
+  asyncHandler(async (req, res) => {
+    const { email, password } = req.body;
 
-  const { data: user, error } = await supabase
-    .from("usuarios")
-    .select("*")
-    .eq("email", email)
-    .single();
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email y contraseña son requeridos" });
+    }
 
-  if (error || !user)
-    return res.status(400).json({ error: "Usuario no encontrado" });
+    const { data: user, error } = await supabase
+      .from("usuarios")
+      .select("*")
+      .eq("email", email)
+      .single();
 
-  const coincide = await bcrypt.compare(password, user.password);
+    if (error || !user) return res.status(400).json({ error: "Usuario no encontrado" });
 
-  if (!coincide)
-    return res.status(401).json({ error: "Contraseña incorrecta" });
+    const coincide = await bcrypt.compare(password, user.password);
 
-  const token = jwt.sign({ id: user.id, email: user.email }, SECRET_KEY, {
-    expiresIn: "2h",
-  });
+    if (!coincide) return res.status(401).json({ error: "Contraseña incorrecta" });
 
-  res.json({ message: "Login exitoso", token });
-});
+    const token = jwt.sign({ id: user.id, email: user.email }, SECRET_KEY, {
+      expiresIn: "2h",
+    });
+
+    res.json({ message: "Login exitoso", token });
+  })
+);
 
 // Ruta protegida de prueba
 app.get("/api/auth/profile", verificarToken, (req, res) => {
@@ -91,227 +124,302 @@ app.get("/api/auth/profile", verificarToken, (req, res) => {
 // CRUD - DUENIOS
 // ============================
 
-app.post("/api/duenios", async (req, res) => {
-  const { duenio, telefono, mail, direccion } = req.body;
+app.post(
+  "/api/duenios",
+  asyncHandler(async (req, res) => {
+    const { duenio, telefono, mail, direccion } = req.body;
+    if (!duenio) {
+      return res.status(400).json({ error: "El nombre del dueño es obligatorio" });
+    }
 
-  const { data, error } = await supabase
-    .from("duenios")
-    .insert([{ duenio, telefono, mail, direccion }])
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from("duenios")
+      .insert([{ duenio, telefono, mail, direccion }])
+      .select()
+      .single();
 
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-});
+    if (error) {
+      console.error("Error creando duenio:", error);
+      return res.status(500).json({ error: error.message });
+    }
+    res.status(201).json(data);
+  })
+);
 
-app.get("/api/duenios", async (req, res) => {
-  const { data, error } = await supabase
-    .from("duenios")
-    .select("id_duenio, duenio");
+app.get(
+  "/api/duenios",
+  asyncHandler(async (req, res) => {
+    const { data, error } = await supabase.from("duenios").select("id_duenio, duenio");
 
-  if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+      console.error("Error obteniendo duenios:", error);
+      return res.status(500).json({ error: error.message });
+    }
 
-  res.json(data);
-});
+    res.json(data);
+  })
+);
 
-app.get("/api/duenios/:id", async (req, res) => {
-  const { id } = req.params;
+app.get(
+  "/api/duenios/:id_duenio",
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id_duenio);
+    if (Number.isNaN(id)) return res.status(400).json({ error: "id_duenio inválido" });
 
-  const { data, error } = await supabase
-    .from("duenios")
-    .select("*")
-    .eq("id_duenio", id)
-    .single();
+    const { data, error } = await supabase
+      .from("duenios")
+      .select("*")
+      .eq("id_duenio", id)
+      .single();
 
-  if (error) return res.status(404).json({ error: "Dueño no encontrado" });
+    if (error || !data) return res.status(404).json({ error: "Dueño no encontrado" });
 
-  res.json(data);
-});
+    res.json(data);
+  })
+);
 
+app.put(
+  "/api/duenios/:id_duenio",
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id_duenio);
+    if (Number.isNaN(id)) return res.status(400).json({ error: "id_duenio inválido" });
 
+    const { duenio, telefono, mail, direccion } = req.body;
+    const updateData = {};
+    if (duenio !== undefined) updateData.duenio = duenio;
+    if (telefono !== undefined) updateData.telefono = telefono;
+    if (mail !== undefined) updateData.mail = mail;
+    if (direccion !== undefined) updateData.direccion = direccion;
 
+    const { data, error } = await supabase
+      .from("duenios")
+      .update(updateData)
+      .eq("id_duenio", id)
+      .select()
+      .single();
 
-app.put("/api/duenios/:id_duenio", async (req, res) => {
-  const id = Number(req.params.id_duenio);
-  const { duenio, telefono, mail, direccion } = req.body;
+    if (error) {
+      console.error("Error actualizando duenio:", error);
+      return res.status(500).json({ error: error.message });
+    }
+    res.json(data);
+  })
+);
 
-  const { data, error } = await supabase
-    .from("duenios")
-    .update({ duenio, telefono, mail, direccion })
-    .eq("id_duenio", id)
-    .select()
-    .single();
+app.delete(
+  "/api/duenios/:id_duenio",
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id_duenio);
+    if (Number.isNaN(id)) return res.status(400).json({ error: "id_duenio inválido" });
 
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-});
+    const { error } = await supabase.from("duenios").delete().eq("id_duenio", id);
 
-app.delete("/api/duenios/:id_duenio", async (req, res) => {
-  const id = Number(req.params.id_duenio);
-
-  const { error } = await supabase
-    .from("duenios")
-    .delete()
-    .eq("id_duenio", id);
-
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ message: "Duenio eliminado correctamente" });
-});
+    if (error) {
+      console.error("Error eliminando duenio:", error);
+      return res.status(500).json({ error: error.message });
+    }
+    res.json({ message: "Duenio eliminado correctamente" });
+  })
+);
 
 // ============================
 // CRUD OBJETOS PERDIDOS
 // ============================
 
-app.post("/api/objetos", async (req, res) => {
-  const { nombre, caracteristicas, id_duenio, estado } = req.body;
+app.post(
+  "/api/objetos",
+  asyncHandler(async (req, res) => {
+    const { nombre, caracteristicas, id_duenio, estado } = req.body;
 
-  if (!nombre || !caracteristicas || id_duenio === "" || estado === undefined) {
-    return res.status(400).json({ error: "Faltan datos obligatorios" });
-  }
+    if (!nombre || !caracteristicas || id_duenio === undefined || estado === undefined) {
+      return res.status(400).json({ error: "Faltan datos obligatorios" });
+    }
 
-  // Validamos que el dueño exista
-  const { data: duenioExiste, error: duenioError } = await supabase
-    .from("duenios")
-    .select("id_duenio")
-    .eq("id_duenio", id_duenio)
-    .single();
+    // Validamos que el dueño exista
+    const { data: duenioExiste, error: duenioError } = await supabase
+      .from("duenios")
+      .select("id_duenio")
+      .eq("id_duenio", Number(id_duenio))
+      .single();
 
-  if (duenioError || !duenioExiste) {
-    return res.status(400).json({ error: "El dueño no existe" });
-  }
+    if (duenioError || !duenioExiste) {
+      return res.status(400).json({ error: "El dueño no existe" });
+    }
 
-  // Insertamos
-  const { data, error } = await supabase
-    .from("objetos_perdidos")
-    .insert([
-      {
+    // Insertamos
+    const { data, error } = await supabase
+      .from("objetos_perdidos")
+      .insert([
+        {
+          nombre,
+          caracteristicas,
+          id_duenio: Number(id_duenio),
+          estado: Boolean(estado),
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error insertando objeto:", error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.status(201).json(data);
+  })
+);
+
+app.get(
+  "/api/objetos",
+  asyncHandler(async (req, res) => {
+    const { data, error } = await supabase
+      .from("objetos_perdidos")
+      .select(`
+        id,
         nombre,
         caracteristicas,
-        id_duenio: Number(id_duenio),
-        estado: Boolean(estado),
-      },
-    ])
-    .select();
-
-  if (error) {
-    console.error("Error insertando objeto:", error);
-    return res.status(500).json({ error: error.message });
-  }
-
-  res.json(data[0]);
-});
-
-
-app.get("/api/objetos", async (req, res) => {
-  const { data, error } = await supabase
-    .from("objetos_perdidos")
-    .select(`
-      id,
-      nombre,
-      caracteristicas,
-      estado,
-      id_duenio,
-      created_at,
-      duenios:duenios (
-        id_duenio,
-        duenio,
-        telefono,
-        mail,
-        direccion
-      )
-    `)
-    .order("id", { ascending: true });
-
-  if (error) {
-    console.error("Error obteniendo objetos:", error);
-    return res.status(500).json({ error: error.message });
-  }
-
-  res.json(data);
-});
-
-
-app.get("/api/objetos/:id", async (req, res) => {
-  const id = Number(req.params.id);
-
-  const { data, error } = await supabase
-    .from("objetos_perdidos")
-    .select("*, duenios(*)")
-    .eq("id", id)
-    .single();
-
-  if (error) return res.status(404).json({ error: "Objeto no encontrado" });
-  res.json(data);
-});
-
-app.put("/api/objetos/:id", async (req, res) => {
-  const id = Number(req.params.id);
-  const { nombre, caracteristicas, id_duenio, estado } = req.body;
-  const { data, error } = await supabase
-    .from("objetos_perdidos")
-    .update({ nombre_object, caracteristicas, id_duenio })
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-});
-
-// POST → Crear objeto en Supabase
-app.post("/api/objetos", async (req, res) => {
-  const { nombre, caracteristicas, id_duenio, estado } = req.body;
-
-  // Insertar en la tabla EXACTA "objetos_perdidos"
-  const { data, error } = await supabase
-    .from("objetos_perdidos")
-    .insert([
-      {
-        nombre,
-        caracteristicas,
-        id_duenio,
         estado,
-      },
-    ])
-    .select(); // <- importante: devuelve el objeto creado
+        id_duenio,
+        created_at,
+        duenios:duenios (
+          id_duenio,
+          duenio,
+          telefono,
+          mail,
+          direccion
+        )
+      `)
+      .order("id", { ascending: true });
 
-  if (error) return res.status(400).json({ error: error.message });
+    if (error) {
+      console.error("Error obteniendo objetos:", error);
+      return res.status(500).json({ error: error.message });
+    }
 
-  res.json({ message: "Objeto creado", objeto: data[0] });
-});
+    res.json(data);
+  })
+);
 
+app.get(
+  "/api/objetos/:id",
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) return res.status(400).json({ error: "id inválido" });
 
-app.delete("/api/objetos/:id", async (req, res) => {
-  const { id } = req.params;
+    const { data, error } = await supabase
+      .from("objetos_perdidos")
+      .select("*, duenios(*)")
+      .eq("id", id)
+      .single();
 
-  const { error } = await supabase
-    .from("objetos_perdidos")
-    .delete()
-    .eq("id", id);
+    if (error || !data) return res.status(404).json({ error: "Objeto no encontrado" });
+    res.json(data);
+  })
+);
 
-  if (error) return res.status(500).json({ error: error.message });
+app.put(
+  "/api/objetos/:id",
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) return res.status(400).json({ error: "id inválido" });
 
-  res.json({ message: "Objeto eliminado" });
-});
+    const { nombre, caracteristicas, id_duenio, estado } = req.body;
+    const updateData = {};
+    if (nombre !== undefined) updateData.nombre = nombre;
+    if (caracteristicas !== undefined) updateData.caracteristicas = caracteristicas;
+    if (id_duenio !== undefined) updateData.id_duenio = Number(id_duenio);
+    if (estado !== undefined) updateData.estado = Boolean(estado);
 
+    // Optional: check id_duenio exists if provided
+    if (updateData.id_duenio) {
+      const { data: duenioCheck, error: duenioErr } = await supabase
+        .from("duenios")
+        .select("id_duenio")
+        .eq("id_duenio", updateData.id_duenio)
+        .single();
+      if (duenioErr || !duenioCheck) {
+        return res.status(400).json({ error: "El dueño especificado no existe" });
+      }
+    }
+
+    const { data, error } = await supabase
+      .from("objetos_perdidos")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error actualizando objeto:", error);
+      return res.status(500).json({ error: error.message });
+    }
+    res.json(data);
+  })
+);
+
+app.delete(
+  "/api/objetos/:id",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const { error } = await supabase.from("objetos_perdidos").delete().eq("id", id);
+
+    if (error) {
+      console.error("Error eliminando objeto:", error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json({ message: "Objeto eliminado" });
+  })
+);
 
 // Objetos por dueño
-app.get("/api/duenios/:id_duenio/objetos", async (req, res) => {
-  const id = Number(req.params.id_duenio);
+app.get(
+  "/api/duenios/:id_duenio/objetos",
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id_duenio);
+    if (Number.isNaN(id)) return res.status(400).json({ error: "id_duenio inválido" });
 
-  const { data, error } = await supabase
-    .from("objetos_perdidos")
-    .select("*")
-    .eq("id_duenio", id);
+    const { data, error } = await supabase
+      .from("objetos_perdidos")
+      .select("*")
+      .eq("id_duenio", id);
 
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+    if (error) {
+      console.error("Error obteniendo objetos por dueño:", error);
+      return res.status(500).json({ error: error.message });
+    }
+    res.json(data);
+  })
+);
+
+// 404 para rutas no encontradas (API)
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({ error: "Ruta API no encontrada", path: req.path });
+  }
+  next();
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
+  res.status(500).json({ error: "Ocurrió un error interno" });
+});
+
+// add handlers to catch unhandled errors and rejections
+process.on("unhandledRejection", (reason, p) => {
+  console.error("Unhandled Rejection at:", p, "reason:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception thrown:", err);
+  // opcional: process.exit(1); // si deseas que el proceso se reinicie
 });
 
 // ============================
 // START SERVER
 // ============================
-const PORT = 3001;
+const PORT = process.env.PORT ?? 3001;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
