@@ -19,10 +19,22 @@ app.use(
   })
 );
 
-// Health check - devuelve 200 para comprobar que el backend está activo
-app.get("/", (req, res) => {
-  res.json({ message: "Backend running" });
-});
+// Health check - devuelve el contenido de la base de datos
+app.get("/", asyncHandler(async (req, res) => {
+  const { data, error } = await supabase
+    .from("usuarios")
+    .select("*");
+
+  if (error) {
+    console.error("Error obteniendo usuarios:", error);
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json({ 
+    message: "Backend running",
+    usuarios: data 
+  });
+}));
 
 // Controlador para favicon (evita 404 en algunas apps)
 app.get("/favicon.ico", (req, res) => res.status(204).end());
