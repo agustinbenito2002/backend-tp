@@ -11,30 +11,14 @@ const app = express();
 app.use(express.json());
 
 const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
-app.use(
-  cors({
-    origin: CLIENT_URL,
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-
-// Health check - devuelve el contenido de la base de datos
-app.get("/", asyncHandler(async (req, res) => {
-  const { data, error } = await supabase
-    .from("usuarios")
-    .select("*");
-
-  if (error) {
-    console.error("Error obteniendo usuarios:", error);
-    return res.status(500).json({ error: error.message });
-  }
-
-  res.json({ 
-    message: "Backend running",
-    usuarios: data 
-  });
+app.use(cors({
+  origin: ['http://localhost:5173', 'https://frontend-tp-1.onrender.com']
 }));
+
+// Health check - devuelve 200 para comprobar que el backend está activo
+app.get("/", (req, res) => {
+  res.json({ message: "Backend running" });
+});
 
 // Controlador para favicon (evita 404 en algunas apps)
 app.get("/favicon.ico", (req, res) => res.status(204).end());
